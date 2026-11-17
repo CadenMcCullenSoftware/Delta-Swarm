@@ -340,7 +340,7 @@ def test_execute_action_executes_with_commander_approval():
 
     res = enforcer.execute_action(proposal, eval_res, commander_approval=True)
     assert res["action_status"] == "EXECUTED"
-    assert res["authorized_by"] == "HUMAN_COMMANDER"
+    assert res["authorized_by"] == "human_commander"
 
 
 def test_execute_action_blocks_incorrect_proposal():

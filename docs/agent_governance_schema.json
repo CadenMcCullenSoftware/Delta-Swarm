@@ -11,12 +11,12 @@
       "properties": {
         "ai_role": {
           "type": "string",
-          "enum": ["SUPPORTIVE_TOOL", "ANALYTICAL_ACCELERATOR"],
+          "enum": ["supporting_tool", "analytical_accelerator"],
           "description": "The AI is a supportive analytical instrument, never the commander or an autonomous decision-maker."
         },
         "commander_role": {
           "type": "string",
-          "enum": ["HUMAN_COMMANDER", "FINAL_AUTHORITY"],
+          "enum": ["human_commander", "final_authority"],
           "description": "Correctness and final operational authorization are enforced by the human commander."
         }
       },
@@ -33,7 +33,7 @@
         },
         "trust_foundation": {
           "type": "string",
-          "enum": ["PRIMARY_EVIDENCE", "EMPIRICAL_REASONING"],
+          "enum": ["primary_evidence", "empirical_reasoning"],
           "description": "Trust is grounded strictly in verifiable evidence, primary sources, calculations, and causal reasoning."
         },
         "require_independent_verification": {
@@ -55,7 +55,7 @@
         },
         "action_type": {
           "type": "string",
-          "enum": ["READ_ONLY_PROPOSAL", "STATE_CHANGING_ACTION"],
+          "enum": ["read_only_proposal", "state_changing_action"],
           "description": "The class of action being gated."
         }
       },

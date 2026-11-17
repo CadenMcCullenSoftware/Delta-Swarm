@@ -424,24 +424,24 @@ def _run_governance_load(swarm: Swarm, parsed: dict) -> str:
     # Validate required structure per agent_governance_schema.json
     errors = []
     role = config.get("role_definition", {})
-    if role.get("ai_role") not in ("SUPPORTIVE_TOOL", "ANALYTICAL_ACCELERATOR"):
-        errors.append("role_definition.ai_role must be SUPPORTIVE_TOOL or ANALYTICAL_ACCELERATOR")
-    if role.get("commander_role") not in ("HUMAN_COMMANDER", "FINAL_AUTHORITY"):
-        errors.append("role_definition.commander_role must be HUMAN_COMMANDER or FINAL_AUTHORITY")
+    if role.get("ai_role") not in ("supporting_tool", "analytical_accelerator"):
+        errors.append("role_definition.ai_role must be supporting_tool or analytical_accelerator")
+    if role.get("commander_role") not in ("human_commander", "final_authority"):
+        errors.append("role_definition.commander_role must be human_commander or final_authority")
 
     vp = config.get("verification_policy", {})
     if vp.get("compliance_equals_correctness") is not False:
         errors.append("verification_policy.compliance_equals_correctness must be false")
-    if vp.get("trust_foundation") not in ("PRIMARY_EVIDENCE", "EMPIRICAL_REASONING"):
-        errors.append("verification_policy.trust_foundation must be PRIMARY_EVIDENCE or EMPIRICAL_REASONING")
+    if vp.get("trust_foundation") not in ("primary_evidence", "empirical_reasoning"):
+        errors.append("verification_policy.trust_foundation must be primary_evidence or empirical_reasoning")
     if vp.get("require_independent_verification") is not True:
         errors.append("verification_policy.require_independent_verification must be true")
 
     eg = config.get("execution_gate", {})
     if eg.get("commander_approval_required") is not True:
         errors.append("execution_gate.commander_approval_required must be true")
-    if eg.get("action_type") not in ("READ_ONLY_PROPOSAL", "STATE_CHANGING_ACTION"):
-        errors.append("execution_gate.action_type must be READ_ONLY_PROPOSAL or STATE_CHANGING_ACTION")
+    if eg.get("action_type") not in ("read_only_proposal", "state_changing_action"):
+        errors.append("execution_gate.action_type must be read_only_proposal or state_changing_action")
 
     if errors:
         return "GOVERNANCE CONFIG INVALID:\n" + "\n".join(f"  - {e}" for e in errors)

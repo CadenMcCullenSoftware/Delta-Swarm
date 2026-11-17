@@ -155,5 +155,5 @@ class AgentLogicEnforcer:
         return {
             "action_status": "EXECUTED",
             "action_payload": action_payload,
-            "authorized_by": "HUMAN_COMMANDER",
+            "authorized_by": "human_commander",
         }

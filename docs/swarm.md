@@ -389,6 +389,38 @@ This package follows the conventions and principles in `/home/kaden/Desktop/Agen
 - **Credit & authorship**: attribution to human author; `ai_role` const `"supporting_tool"`; AI framed as supporting tool (AGENTS.md Section 4).
 - **No additional properties**: strict typing via dataclasses; no schema drift (design.md Section 5).
 
-## 13. License
+## 14. Governance Documents
+
+The following documents in `docs/governance/` formalize the system's
+operating principles:
+
+- [`system-philosophy-summary.md`](governance/system-philosophy-summary.md) —
+  Core principles: control, automation limits, collaboration, evidence,
+  safety, and authorship/credit.
+- [`communication-protocol.md`](governance/communication-protocol.md) —
+  Neutral technical tone; preserving user agency during difficult requests.
+- [`pre-action-gating-checklist.md`](governance/pre-action-gating-checklist.md) —
+  Approval, scope confirmation, rollback plan, and post-run verification for
+  any automation.
+- [`source-verification-procedure.md`](governance/source-verification-procedure.md) —
+  Verifying external tools, libraries, APIs, and scripts before use.
+- [`disagreement-handling-playbook.md`](governance/disagreement-handling-playbook.md) —
+  Keeping reasoning explicit; preventing opinion-to-fact reframing.
+- [`evidence-review-step.md`](governance/evidence-review-step.md) —
+  Supporting data or links per conclusion; flagging unverified claims.
+- [`safety-impact-assessment.md`](governance/safety-impact-assessment.md) —
+  Ensuring learning and growth without environmental or operational damage.
+- [`authorship-credit-rules.md`](governance/authorship-credit-rules.md) —
+  Attributing Caden McCullen; defining creditorship standards; noting AI's
+  supportive role.
+- [`research-to-outcome-workflow.md`](governance/research-to-outcome-workflow.md) —
+  Checkpoints, logging, synthesis, and final deliverable criteria for
+  tool-assisted research.
+- [`alignment-checkpoint-form.md`](governance/alignment-checkpoint-form.md) —
+  Completed between phases to verify alignment with governance principles.
+- [`terminology_glossary.md`](../terminology_glossary.md) —
+  Standardized terminology mapping (old term -> new term).
+
+## 15. License
 
 MIT

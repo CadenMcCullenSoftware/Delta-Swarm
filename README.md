@@ -117,3 +117,5 @@ MIT
 ## Detailed documentation
 
 See [docs/swarm.md](./docs/swarm.md) for full module reference, CLI/NLP reference, evidence-record schema, automation-gating checklist, sandboxing/security analysis with research sources, usage examples, testing status, and known limitations.
+
+See [docs/governance/](./docs/governance/) for governance documents: system philosophy summary, communication protocol, pre-action gating checklist, source verification procedure, disagreement-handling playbook, evidence review step, safety impact assessment, authorship and credit rules, research-to-outcome workflow, and alignment checkpoint form. See [docs/terminology_glossary.md](./docs/terminology_glossary.md) for the standardized terminology glossary.
