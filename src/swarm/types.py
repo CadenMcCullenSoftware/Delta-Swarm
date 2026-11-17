@@ -1,10 +1,21 @@
-"""Core type definitions for the swarm system."""
+"""Core type definitions for the swarm system.
+
+Includes explicit separation between compliance (procedure followed) and
+correctness (evidence-supported result), per the principle that compliance
+does not equal correctness and that correctness is enforced by the human
+commander, not the AI.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class AgentRole(str, Enum):
@@ -54,6 +65,23 @@ class Reversibility(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ComplianceStatus(str, Enum):
+    """Whether the required procedure was followed (approval, scope, gating)."""
+
+    COMPLIANT = "compliant"
+    NON_COMPLIANT = "non_compliant"
+    NOT_ASSESSED = "not_assessed"
+
+
+class CorrectnessStatus(str, Enum):
+    """Whether the result is evidence-supported. Enforced by the commander, not the AI."""
+
+    CORRECT = "correct"
+    INCORRECT = "incorrect"
+    UNCERTAIN = "uncertain"
+    NOT_ASSESSED = "not_assessed"
+
+
 class EpistemicStatus(str, Enum):
     SOURCE_REPORTED_FACT = "source_reported_fact"
     DIRECT_OBSERVATION = "direct_observation"
@@ -101,6 +129,13 @@ class Task:
     timeout: int | None = None
     failure_handling: str = "stop"
     requires_approval: bool = False
+    # Compliance vs correctness separation
+    compliance_status: ComplianceStatus = ComplianceStatus.NOT_ASSESSED
+    correctness_status: CorrectnessStatus = CorrectnessStatus.NOT_ASSESSED
+    commander_review_required: bool = True
+    commander_reviewed: bool = False
+    commander_notes: str | None = None
+    commander_reviewed_at: str | None = None
 
 
 @dataclass
@@ -138,6 +173,13 @@ class Action:
     effects: list[str] = field(default_factory=list)
     side_effects: list[str] = field(default_factory=list)
     reversibility: Reversibility = Reversibility.UNKNOWN
+    # Compliance vs correctness separation
+    compliance_status: ComplianceStatus = ComplianceStatus.NOT_ASSESSED
+    correctness_status: CorrectnessStatus = CorrectnessStatus.NOT_ASSESSED
+    compliance_reasoning: str = ""
+    correctness_reasoning: str = ""
+    commander_reviewed: bool = False
+    commander_reviewed_at: str | None = None
 
 
 @dataclass
@@ -185,11 +227,28 @@ class Artifact:
 
 
 @dataclass
+class EvidenceReview:
+    """A human commander's review separating compliance from correctness."""
+
+    review_id: str
+    reviewed_by: str
+    reviewed_at: str
+    target_id: str
+    target_type: str  # "task" or "action" or "claim"
+    compliance_assessment: ComplianceStatus
+    correctness_assessment: CorrectnessStatus
+    reasoning: str
+    commander_override: bool = False
+    notes: str | None = None
+
+
+@dataclass
 class Reasoning:
     summary: str = ""
     assumptions: list[str] = field(default_factory=list)
     unknowns: list[str] = field(default_factory=list)
     alternatives_considered: list[str] = field(default_factory=list)
+    ai_self_certified_correct: bool = False  # must remain False; AI never self-certifies
 
 
 @dataclass
@@ -219,3 +278,4 @@ class SwarmRecord:
     actions: list[Action] = field(default_factory=list)
     evaluation: Evaluation = field(default_factory=Evaluation)
     attribution: Attribution = field(default_factory=Attribution)
+    evidence_reviews: list[EvidenceReview] = field(default_factory=list)

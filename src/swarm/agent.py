@@ -1,4 +1,9 @@
-"""Base agent and role-specific agent implementations."""
+"""Base agent and role-specific agent implementations.
+
+Agents report results with uncertainty and never self-certify correctness.
+Correctness is enforced by the human commander; compliance (procedure
+followed) is tracked separately by the gate.
+"""
 
 from __future__ import annotations
 
@@ -32,13 +37,27 @@ class Agent:
         self.record.active = True
 
     def execute(self, task: Task) -> tuple[str, str | None]:
-        """Execute a task and return (result, error)."""
+        """Execute a task and return (result, error).
+
+        The agent reports the outcome but does NOT certify correctness.
+        Correctness is enforced by the human commander.
+        """
         raise NotImplementedError
 
-    def report(self, task_id: str, result: str, error: str | None = None) -> None:
+    def report(self, task_id: str, result: str, error: str | None = None,
+               uncertainty: str = "not_assessed") -> None:
+        """Report a task outcome with explicit uncertainty disclosure.
+
+        The AI frames this as a supporting observation, not a correctness
+        determination. The human commander retains authority over correctness.
+        """
         self.bus.publish(
             from_agent=self.agent_id,
-            content=f"Task {task_id}: result={result} error={error}",
+            content=(
+                f"Task {task_id}: result={result} error={error} "
+                f"uncertainty={uncertainty} "
+                f"ai_certified_correct=false"
+            ),
         )
 
 
@@ -65,7 +84,11 @@ class WorkerAgent(Agent):
 
 
 class ReviewerAgent(Agent):
-    """Reviews completed task results for correctness and completeness."""
+    """Reviews completed task results for completeness.
+
+    The reviewer agent observes and reports; it does not certify correctness.
+    Correctness is enforced by the human commander.
+    """
 
     def __init__(self, agent_id: str, bus: MessageBus) -> None:
         super().__init__(agent_id, AgentRole.REVIEWER, bus,

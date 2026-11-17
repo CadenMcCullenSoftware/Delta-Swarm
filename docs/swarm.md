@@ -12,25 +12,40 @@ from `/home/kaden/Desktop/Agent-Docs/design.md`.
 
 ## 2. Architecture
 
+### Core Principle: Compliance does not equal Correctness
+
+The swarm enforces a hard separation between **compliance** and **correctness**:
+
+| Concept | Meaning | Enforced by |
+|---------|---------|-------------|
+| **Compliance** | The procedure was followed: approval obtained, scope confirmed, prior-to-execution respected | The approval gate (`swarm approve`) |
+| **Correctness** | The result is evidence-supported | The human **commander** (`swarm review-task` / `review-action`) |
+
+- Approving an action means the pre-action gate was satisfied. It does **not** mean the result is correct.
+- Correctness remains `CorrectnessStatus.NOT_ASSESSED` until the human commander reviews.
+- The AI **never self-certifies correctness** (`ai_self_certified_correct` is always `false`). The AI is a supporting tool, not the commander.
+- A task can be `compliant` (procedure followed) but `incorrect` (result wrong). Compliance does not equal correctness.
+
 ### 2.1 Core components
 
 | Module | Responsibility |
 |--------|--------------|
-| `swarm/types.py` | Data models: agents, tasks, messages, actions, claims, sources, artifacts, attribution, evidence record |
+| `swarm/types.py` | Data models: agents, tasks, messages, actions, claims, sources, artifacts, attribution, evidence record, `ComplianceStatus`, `CorrectnessStatus`, `EvidenceReview` |
 | `swarm/message_bus.py` | In-memory publish-subscribe blackboard for agent-to-agent communication |
 | `swarm/workflow.py` | Task graph with dependency ordering (topological sort), readiness checks, status transitions |
-| `swarm/gate.py` | Pre-action approval gate for state-changing operations |
-| `swarm/agent.py` | Base `Agent` and role-specific agents: Planner, Worker, Reviewer, Coordinator |
-| `swarm/swarm.py` | `Swarm` coordinator: orchestrates agents, runs workflows, manages approval and execution |
-| `swarm/cli.py` | Command-line interface: argparse mode (`add`, `run`, `approve`, `decline`, `status`) and interactive NLP mode (`nlp`) |
+| `swarm/gate.py` | Pre-action approval gate; tracks compliance separately from correctness |
+| `swarm/agent.py` | Base `Agent` and roles: Planner, Worker, Reviewer, Coordinator. Agents report uncertainty; never self-certify correctness. |
+| `swarm/swarm.py` | `Swarm` coordinator: orchestrates agents, runs workflows, manages approval, exposes `commander_review_task` / `commander_review_action` |
+| `swarm/cli.py` | Command-line interface: `add`, `run`, `approve`, `decline`, `review-task`, `review-action`, `status`, `nlp` |
 
 ### 2.2 Data flow
 
 1. A user adds tasks to a `Workflow`. Each task has a name, command (as an argument list), optional dependencies, timeout, failure-handling policy, and an approval flag.
 2. The `Swarm.run()` method computes a topological dependency order and executes each task once its dependencies are complete.
 3. Task execution selects a capable agent (planner/worker/reviewer/coordinator), marks the task `in_progress`, runs the command via `subprocess.run`, and marks the task `completed` or `failed`.
-4. If a task requires approval, it is marked `blocked` at the gate until a human calls `approve_action` (or `swarm approve --action-id <id>`).
-5. Every task and action is recorded in the `EvidenceRecord`, which carries claims, sources, artifacts, actions, reasoning, evaluation, and attribution metadata.
+4. If a task requires approval, it is marked `blocked` at the gate until a human calls `approve_action` (or `swarm approve --action-id <id>`). Approval sets `compliance=compliant`; `correctness` stays `not_assessed`.
+5. The human commander reviews the result via `commander_review_task` / `swarm review-task` and sets `correctness` (`correct`/`incorrect`/`uncertain`). The AI does not self-certify.
+6. Every task and action is recorded in the `EvidenceRecord`, which carries claims, sources, artifacts, actions, reasoning, evaluation, attribution, and evidence reviews separating compliance from correctness.
 
 ### 2.3 Execution model
 
@@ -48,9 +63,11 @@ Defines all shared dataclasses and enums:
 - `TaskStatus`: `pending`, `assigned`, `in_progress`, `completed`, `failed`, `blocked`, `cancelled`
 - `ActionType`: `draft_only`, `read_only`, `external_message`, `publish`, `purchase`, `delete`, `submit`, `access_change`, `data_disclosure`, `other`
 - `ApprovalStatus`: `not_started`, `drafted`, `awaiting_approval`, `approved`, `declined`, `completed`, `blocked`
+- `ComplianceStatus`: `compliant`, `non_compliant`, `not_assessed` — procedure followed
+- `CorrectnessStatus`: `correct`, `incorrect`, `uncertain`, `not_assessed` — evidence-supported (commander-enforced)
 - `Reversibility`: `reversible`, `partly_reversible`, `irreversible`, `unknown`
 - `EpistemicStatus` / `SupportStatus`: evidence metadata per the agent-design schema
-- `AgentRecord`, `Task`, `Message`, `ApprovalGate`, `Action`, `Claim`, `Source`, `Artifact`, `Reasoning`, `Evaluation`, `Attribution`, `SwarmRecord`
+- `AgentRecord`, `Task`, `Message`, `ApprovalGate`, `Action`, `Claim`, `Source`, `Artifact`, `Reasoning`, `Evaluation`, `Attribution`, `EvidenceReview`, `SwarmRecord`
 
 ### 3.2 `swarm/message_bus.py`
 
@@ -103,10 +120,12 @@ Each implements `execute(task)` returning `(result, error)`. The base class repo
 
 CLI entry point `swarm`:
 - `add --workflow <name> --task-id <id> --name <name> --command <cmd>... [--depends-on <d>...] [--requires-approval] [--timeout <n>] [--failure-handling stop|continue]`
-- `run --workflow <name> [--coordinator <id>] [--auto-approve]`
-- `approve --action-id <id>`
+- `run --workflow <name> [--coordinator <id>] [--auto-approve]` — `--auto-approve` is a commander opt-in for **compliance only**; it does NOT certify correctness
+- `approve --action-id <id>` — satisfies the compliance gate; correctness stays `not_assessed`
 - `decline --action-id <id>`
-- `status --workflow <name>` — prints JSON summary
+- `review-task --task-id <id> --reviewed-by <name> --correctness correct|incorrect|uncertain [--compliance compliant|non_compliant] [--reasoning <...>] [--notes <...>] [--commander-override]` — commander enforces correctness; AI does not self-certify
+- `review-action --action-id <id> --reviewed-by <name> --correctness correct|incorrect|uncertain [--compliance compliant|non_compliant] [--reasoning <...>] [--notes <...>] [--commander-override]` — commander enforces correctness on an action
+- `status --workflow <name>` — prints JSON summary including compliance and correctness per task/action
 - `nlp` — interactive natural-language mode (see Section 4)
 
 ## 4. Natural-language (NLP) mode
@@ -244,11 +263,34 @@ from swarm.swarm import Swarm
 from swarm.types import Task
 
 s = Swarm.default_swarm(name="ci", auto_approve=True)
-s.add_task(Task(task_id="build", name="build", command=["echo", "hi"]))
+s.add_task(Task(task_id="build", name="build", command=["echo", "hi"],
+                requires_approval=True))
 s.add_task(Task(task_id="test", name="test", command=["python", "-m", "pytest", "tests/"], depends_on=["build"]))
 statuses = s.run()
 print(statuses)
+
+# Commander enforces correctness (AI does not self-certify):
+s.commander_review_task(
+    review_id="r-1",
+    reviewed_by="Caden McCullen",
+    task_id="build",
+    correctness="correct",
+    compliance="compliant",
+    reasoning="output matches expected",
+    notes="verified",
+)
 ```
+
+### 8.5 Commander review examples
+
+```bash
+# Commander marks a task correct (evidence-supported):
+swarm review-task --task-id build --correctness correct --reviewed-by "Caden McCullen" --reasoning "output matches expected"
+
+# Commander marks an action incorrect despite compliance:
+swarm review-action --action-id action-deploy --correctness incorrect --reviewed-by "Caden McCullen" --reasoning "result wrong though procedure followed"
+```
+
 
 ## 9. Testing
 
@@ -258,7 +300,7 @@ Run the full suite:
 python -m pytest tests/ -v
 ```
 
-Results: 14 tests pass, covering agent capabilities, message bus, workflow dependency ordering (including circular-dependency rejection), ready-task computation, approval gate approve/decline/complete (including the rule that unapproved state-changing actions cannot complete), evidence record claims/sources/attribution, swarm default agents, auto-approve run, approval-blocked run, and approve-to-unblock.
+Results: 21 tests pass, covering agent capabilities, message bus, workflow dependency ordering (including circular-dependency rejection), ready-task computation, approval gate approve/decline/complete (including the rule that unapproved state-changing actions cannot complete), evidence record claims/sources/attribution, swarm default agents, auto-approve run (compliance only), approval-blocked run, approve-to-unblock, commander review setting correctness, compliance-correctness separation (compliant-but-incorrect is possible), AI never self-certifies correctness, and NLP parsing.
 
 Compilation: `python -m py_compile src/swarm/*.py tests/test_swarm.py` — clean.
 
@@ -269,6 +311,7 @@ Compilation: `python -m py_compile src/swarm/*.py tests/test_swarm.py` — clean
 - **NLP parsing is best-effort**: regex/shlex-based; complex or ambiguous sentences may fail. Type `help` for examples.
 - **Failure handling**: `stop` halts the dependency loop on the first failed task; dependent tasks remain `PENDING` (not executed). `continue` is accepted as a value but the loop currently breaks on any failure regardless; this should be aligned with the documented policy if `continue` semantics are required.
 - **Approval callback**: `set_action_handler` is invoked for blocked tasks; in CLI `run` mode it prints a message but does not wait for input — use `swarm approve --action-id <id>` in a separate step.
+- **Correctness is commander-enforced**: the AI never self-certifies correctness (`ai_self_certified_correct` is always `false`). Correctness must be set via `swarm review-task` / `review-action` by the human commander.
 - **No persistence**: state is in-memory only; no `.hydra/`-style durable history or SQLite store is implemented in this package.
 
 ## 11. Alignment with existing project principles

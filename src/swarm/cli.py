@@ -1,12 +1,9 @@
 """Command-line interface for the swarm system.
 
 Includes a traditional argparse mode and an interactive natural-language
-(nlp) mode so commands can be issued as plain sentences such as:
-
-    add task build command "echo hi"
-    run workflow release auto-approve
-    approve action action-build
-    status workflow release
+(nlp) mode. The CLI enforces the separation between compliance (procedure
+followed) and correctness (evidence-supported result): the AI does not
+self-certify correctness; only the human commander reviews correctness.
 """
 
 from __future__ import annotations
@@ -41,15 +38,41 @@ def _build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Run the workflow")
     run.add_argument("--workflow", required=True)
     run.add_argument("--coordinator", default="coordinator-1")
-    run.add_argument("--auto-approve", action="store_true")
+    run.add_argument("--auto-approve", action="store_true",
+                     help="Commander opt-in for COMPLIANCE only. Does not certify correctness.")
 
-    approve = sub.add_parser("approve", help="Approve a pending action")
+    approve = sub.add_parser("approve", help="Approve a pending action (compliance gate)")
     approve.add_argument("--action-id", required=True)
 
     decline = sub.add_parser("decline", help="Decline a pending action")
     decline.add_argument("--action-id", required=True)
 
-    status = sub.add_parser("status", help="Show swarm status")
+    review_task = sub.add_parser("review-task",
+                                 help="Commander enforces correctness on a task")
+    review_task.add_argument("--task-id", required=True)
+    review_task.add_argument("--reviewed-by", required=True)
+    review_task.add_argument("--correctness", required=True,
+                             choices=["correct", "incorrect", "uncertain"],
+                             help="Correctness assessment. Commander enforces; AI does not self-certify.")
+    review_task.add_argument("--compliance", default="compliant",
+                             choices=["compliant", "non_compliant"])
+    review_task.add_argument("--reasoning", default="")
+    review_task.add_argument("--notes", default=None)
+    review_task.add_argument("--commander-override", action="store_true")
+
+    review_action = sub.add_parser("review-action",
+                                   help="Commander enforces correctness on an action")
+    review_action.add_argument("--action-id", required=True)
+    review_action.add_argument("--reviewed-by", required=True)
+    review_action.add_argument("--correctness", required=True,
+                               choices=["correct", "incorrect", "uncertain"])
+    review_action.add_argument("--compliance", default="compliant",
+                               choices=["compliant", "non_compliant"])
+    review_action.add_argument("--reasoning", default="")
+    review_action.add_argument("--notes", default=None)
+    review_action.add_argument("--commander-override", action="store_true")
+
+    status = sub.add_parser("status", help="Show swarm status (compliance + correctness)")
     status.add_argument("--workflow", required=True)
 
     nlp = sub.add_parser("nlp", help="Interactive natural-language command mode")
@@ -65,6 +88,7 @@ _COMMAND_ALIASES = {
     "approve": ["approve", "authorize", "ok"],
     "decline": ["decline", "reject", "deny", "cancel"],
     "status": ["status", "show", "list"],
+    "review": ["review", "assess"],
 }
 
 _TASK_WORDS = ["task", "job", "step"]
@@ -92,7 +116,6 @@ def parse_nlp(text: str) -> dict | None:
     if lower in {"help", "?"}:
         return {"command": "help"}
 
-    # add task <id> [name <name>] [command <cmd>...] [depends on <deps>] [approval]
     if _match_any(lower, _COMMAND_ALIASES["add"]):
         cmd: dict = {"command": "add"}
         m = re.search(r"\btask\b\s+(\S+)", lower)
@@ -106,13 +129,11 @@ def parse_nlp(text: str) -> dict | None:
         cm = re.search(r"\bcommand\b\s+(.+)", lower)
         if cm:
             rest = cm.group(1)
-            # strip trailing depends-on / approval clauses
             rest = re.split(r"\b(depends on|depends-on|approval|requires approval)\b", rest)[0]
             cmd["command_args"] = shlex.split(rest)
         dm = re.search(r"\bdepends on\b\s+(.+)", lower)
         if dm:
             dep_clause = dm.group(1)
-            # stop at the approval keyword so it is not treated as a dependency
             dep_clause = re.split(r"\b(approval|requires approval)\b", dep_clause)[0]
             cmd["depends_on"] = shlex.split(dep_clause)
         else:
@@ -121,7 +142,6 @@ def parse_nlp(text: str) -> dict | None:
             cmd["requires_approval"] = True
         return cmd
 
-    # run workflow <name> [auto-approve]
     if _match_any(lower, _COMMAND_ALIASES["run"]):
         cmd = {"command": "run"}
         m = re.search(r"\bworkflow\b\s+(\S+)", lower)
@@ -131,7 +151,6 @@ def parse_nlp(text: str) -> dict | None:
             cmd["auto_approve"] = True
         return cmd
 
-    # approve action <id>
     if _match_any(lower, _COMMAND_ALIASES["approve"]):
         cmd = {"command": "approve"}
         m = re.search(r"\baction\b\s+(\S+)", lower)
@@ -139,7 +158,6 @@ def parse_nlp(text: str) -> dict | None:
             cmd["action_id"] = m.group(1)
         return cmd
 
-    # decline action <id>
     if _match_any(lower, _COMMAND_ALIASES["decline"]):
         cmd = {"command": "decline"}
         m = re.search(r"\baction\b\s+(\S+)", lower)
@@ -147,7 +165,20 @@ def parse_nlp(text: str) -> dict | None:
             cmd["action_id"] = m.group(1)
         return cmd
 
-    # status workflow <name>
+    if _match_any(lower, ["review task"]):
+        cmd = {"command": "review-task"}
+        m = re.search(r"\btask\b\s+(\S+)", lower)
+        if m:
+            cmd["task_id"] = m.group(1)
+        return cmd
+
+    if _match_any(lower, ["review action"]):
+        cmd = {"command": "review-action"}
+        m = re.search(r"\baction\b\s+(\S+)", lower)
+        if m:
+            cmd["action_id"] = m.group(1)
+        return cmd
+
     if _match_any(lower, _COMMAND_ALIASES["status"]):
         cmd = {"command": "status"}
         m = re.search(r"\bworkflow\b\s+(\S+)", lower)
@@ -157,6 +188,8 @@ def parse_nlp(text: str) -> dict | None:
 
     return {"command": "unknown", "raw": t}
 
+
+# ---------- command handlers (argparse mode) ----------
 
 def _run_add(swarm: Swarm, parsed: dict) -> str:
     task_id = parsed.get("task_id")
@@ -172,6 +205,8 @@ def _run_add(swarm: Swarm, parsed: dict) -> str:
         command=cmd_args,
         depends_on=parsed.get("depends_on", []),
         requires_approval=parsed.get("requires_approval", False),
+        timeout=parsed.get("timeout"),
+        failure_handling=parsed.get("failure_handling", "stop"),
     )
     swarm.add_task(task)
     return f"Added task {task_id} to workflow {swarm.name}"
@@ -187,8 +222,9 @@ def _run_run(swarm: Swarm, parsed: dict) -> str:
     swarm.set_action_handler(on_action)
     statuses = swarm.run(coordinator_id="coordinator-1")
     lines = [f"Ran workflow {workflow} (auto_approve={auto})"]
+    lines.append("NOTE: auto_approve satisfies COMPLIANCE only; correctness is NOT self-certified.")
     for tid, st in statuses.items():
-        lines.append(f"  {tid}: {st.value}")
+        lines.append(f"  {tid}: status={st.value}")
     return "\n".join(lines)
 
 
@@ -197,7 +233,8 @@ def _run_approve(swarm: Swarm, parsed: dict) -> str:
     if not action_id:
         return "Error: no action id specified. Try: approve action action-build"
     swarm.approve_action(action_id)
-    return f"Approved {action_id}"
+    return (f"Approved {action_id} (compliance gate satisfied). "
+            f"Correctness remains NOT_ASSESSED until commander review.")
 
 
 def _run_decline(swarm: Swarm, parsed: dict) -> str:
@@ -208,16 +245,72 @@ def _run_decline(swarm: Swarm, parsed: dict) -> str:
     return f"Declined {action_id}"
 
 
+def _run_review_task(swarm: Swarm, parsed: dict) -> str:
+    task_id = parsed.get("task_id")
+    if not task_id:
+        return "Error: no task id specified. Try: review-task --task-id build --correctness correct --reviewed-by <name>"
+    reviewed_by = parsed.get("reviewed_by")
+    if not reviewed_by:
+        return "Error: --reviewed-by is required (commander enforces correctness)."
+    correctness = parsed.get("correctness")
+    swarm.commander_review_task(
+        review_id=f"review-{task_id}",
+        reviewed_by=reviewed_by,
+        task_id=task_id,
+        correctness=correctness,
+        compliance=parsed.get("compliance", "compliant"),
+        reasoning=parsed.get("reasoning", ""),
+        notes=parsed.get("notes"),
+        commander_override=parsed.get("commander_override", False),
+    )
+    return (f"Commander {reviewed_by} reviewed task {task_id}: correctness={correctness}. "
+            f"The AI did not self-certify; correctness was enforced by the commander.")
+
+
+def _run_review_action(swarm: Swarm, parsed: dict) -> str:
+    action_id = parsed.get("action_id")
+    if not action_id:
+        return "Error: no action id specified."
+    reviewed_by = parsed.get("reviewed_by")
+    if not reviewed_by:
+        return "Error: --reviewed-by is required."
+    correctness = parsed.get("correctness")
+    swarm.commander_review_action(
+        review_id=f"review-{action_id}",
+        reviewed_by=reviewed_by,
+        action_id=action_id,
+        correctness=correctness,
+        compliance=parsed.get("compliance", "compliant"),
+        reasoning=parsed.get("reasoning", ""),
+        notes=parsed.get("notes"),
+        commander_override=parsed.get("commander_override", False),
+    )
+    return (f"Commander {reviewed_by} reviewed action {action_id}: correctness={correctness}.")
+
+
 def _run_status(swarm: Swarm, parsed: dict) -> str:
     workflow = parsed.get("workflow", swarm.name)
     summary = swarm.summary()
     lines = [f"Status for workflow {workflow}:"]
-    for tid, st in summary["tasks"].items():
-        lines.append(f"  {tid}: {st}")
-    for aid, st in summary["actions"].items():
-        lines.append(f"  {aid}: {st}")
+    lines.append("Compliance = procedure followed. Correctness = evidence-supported (commander-enforced).")
+    for tid, info in summary["tasks"].items():
+        lines.append(f"  {tid}: status={info['status']} "
+                     f"compliance={info['compliance']} "
+                     f"correctness={info['correctness']} "
+                     f"commander_reviewed={info['commander_reviewed']}")
+    for aid, info in summary["actions"].items():
+        lines.append(f"  {aid}: approval={info['approval']} "
+                     f"compliance={info['compliance']} "
+                     f"correctness={info['correctness']} "
+                     f"commander_reviewed={info['commander_reviewed']}")
+    rec = summary["record"]
+    lines.append(f"Attribution: human_author={rec['attribution']['human_author']} "
+                 f"ai_role={rec['attribution']['ai_role']}")
+    lines.append(f"AI self-certified correct: {rec['reasoning']['ai_self_certified_correct']}")
     return "\n".join(lines)
 
+
+# ---------- NLP handling ----------
 
 def handle_nlp(swarm: Swarm, parsed: dict) -> str:
     cmd = parsed.get("command")
@@ -233,6 +326,13 @@ def handle_nlp(swarm: Swarm, parsed: dict) -> str:
         return _run_approve(swarm, parsed)
     if cmd == "decline":
         return _run_decline(swarm, parsed)
+    if cmd == "review-task":
+        # NLP review-task needs --reviewed-by; best-effort: prompt via structured fields absent
+        return ("review-task requires --reviewed-by and --correctness. "
+                "Use the argparse form: swarm review-task --task-id <id> --correctness correct --reviewed-by <name>")
+    if cmd == "review-action":
+        return ("review-action requires --reviewed-by and --correctness. "
+                "Use the argparse form: swarm review-action --action-id <id> --correctness correct --reviewed-by <name>")
     if cmd == "status":
         return _run_status(swarm, parsed)
     return "Unknown command."
@@ -242,10 +342,11 @@ def _help_text() -> str:
     return (
         "Natural-language swarm commands:\n"
         "  add task <id> [name <n>] command <cmd>... [depends on <d>...] [approval]\n"
-        "  run workflow <name> [auto-approve]\n"
+        "  run workflow <name> [auto-approve]   (auto-approve = compliance only, not correctness)\n"
         "  approve action <id>\n"
         "  decline action <id>\n"
         "  status workflow <name>\n"
+        "  review-task / review-action require --reviewed-by and --correctness (use argparse form)\n"
         "  help | exit\n"
     )
 
@@ -298,11 +399,57 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "approve":
-        print(json.dumps({"approved": args.action_id}))
+        swarm = Swarm.default_swarm(name="default")
+        swarm.approve_action(args.action_id)
+        print(json.dumps({"approved": args.action_id, "note": "compliance only; correctness NOT_ASSESSED"}))
         return 0
 
     if args.command == "decline":
+        swarm = Swarm.default_swarm(name="default")
+        swarm.decline_action(args.action_id)
         print(json.dumps({"declined": args.action_id}))
+        return 0
+
+    if args.command == "review-task":
+        swarm = Swarm.default_swarm(name="default")
+        swarm.commander_review_task(
+            review_id=f"review-{args.task_id}",
+            reviewed_by=args.reviewed_by,
+            task_id=args.task_id,
+            correctness=args.correctness,
+            compliance=args.compliance,
+            reasoning=args.reasoning,
+            notes=args.notes,
+            commander_override=args.commander_override,
+        )
+        print(json.dumps({
+            "reviewed": args.task_id,
+            "reviewed_by": args.reviewed_by,
+            "correctness": args.correctness,
+            "compliance": args.compliance,
+            "note": "Commander enforced correctness; AI did not self-certify.",
+        }, indent=2))
+        return 0
+
+    if args.command == "review-action":
+        swarm = Swarm.default_swarm(name="default")
+        swarm.commander_review_action(
+            review_id=f"review-{args.action_id}",
+            reviewed_by=args.reviewed_by,
+            action_id=args.action_id,
+            correctness=args.correctness,
+            compliance=args.compliance,
+            reasoning=args.reasoning,
+            notes=args.notes,
+            commander_override=args.commander_override,
+        )
+        print(json.dumps({
+            "reviewed": args.action_id,
+            "reviewed_by": args.reviewed_by,
+            "correctness": args.correctness,
+            "compliance": args.compliance,
+            "note": "Commander enforced correctness; AI did not self-certify.",
+        }, indent=2))
         return 0
 
     if args.command == "status":
