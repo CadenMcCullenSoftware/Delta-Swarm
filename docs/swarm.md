@@ -291,8 +291,56 @@ swarm review-task --task-id build --correctness correct --reviewed-by "Caden McC
 swarm review-action --action-id action-deploy --correctness incorrect --reviewed-by "Caden McCullen" --reasoning "result wrong though procedure followed"
 ```
 
+### 8.6 Governance CLI commands
 
-## 9. Testing
+```bash
+# AI proposes a claim with evidence metadata (evidence-based trust):
+swarm add-claim --claim-id c-1 --text "The sky is blue" \
+  --epistemic-status direct_observation \
+  --source-ids s-1 \
+  --uncertainty "low" \
+  --verification-criterion "direct observation"
+
+# Add an evidence source:
+swarm add-source --source-id s-1 --title "NIST AI RMF" \
+  --access-status opened_and_reviewed \
+  --source-category government_publication
+
+# Validate the governance record against the schema:
+swarm validate
+
+# Print the full governance record (schema-aligned JSON):
+swarm governance
+```
+
+## 9. Governance Engine & JSON Schema
+
+The formal governance architecture is defined in `docs/governance.schema.json` (JSON Schema draft-07) and implemented by `src/swarm/governance.py` (`GovernanceEngine`). The schema encodes the three governing principles as active constraints:
+
+- **compliance_vs_correctness** — `ComplianceStatus` and `CorrectnessStatus` are tracked independently on every `Action` and `Task`.
+- **evidence_based_trust** — every `Claim` requires `source_ids` and `reasoning_steps`; a claim cannot be `supported` without both.
+- **hierarchical_authority** — `authority_model.commander_is_sole_correctness_authority` is `true`; `ai_may_not_self_certify_correctness` is `true`; `ai_role` is `"supporting_tool"`.
+
+The `GovernanceEngine` enforces these at runtime:
+
+- `draft_action()` — creates an action with compliance and correctness both `not_assessed`.
+- `grant_compliance()` — satisfies the pre-action gate (approval, scope, prior-to-execution). Sets `compliance=compliant` only; correctness stays `not_assessed`.
+- `commander_review()` — only the Commander may set `correctness`. `reviewed_by` must not be `"ai"` or `"supporting_tool"`.
+- `ai_attempt_support()` — a claim can only be marked `supported`/`partly_supported` if it has `source_ids` AND `reasoning_steps`; otherwise a `GovernanceViolationError` is raised.
+- `ai_propose_result()` — the AI proposes a result with uncertainty but does not set correctness.
+- `assert_ai_cannot_self_certify()` — verifies correctness is still `not_assessed` (AI has not touched it).
+- `to_record_dict()` / `validation_errors()` — exports a schema-aligned record and reports structural violations.
+
+### Governance validation errors
+
+`swarm validate` (or `governance.validation_errors()`) reports:
+- Missing top-level keys (`schema_version`, `governance`, `record`).
+- Missing governance principles or authority-model flags.
+- `attribution.ai_role` not equal to `"supporting_tool"`.
+- `reasoning.ai_self_certified_correct` equal to `true`.
+- A claim marked `supported` without `source_ids` or `reasoning_steps`.
+
+## 10. Testing
 
 Run the full suite:
 
@@ -300,11 +348,11 @@ Run the full suite:
 python -m pytest tests/ -v
 ```
 
-Results: 21 tests pass, covering agent capabilities, message bus, workflow dependency ordering (including circular-dependency rejection), ready-task computation, approval gate approve/decline/complete (including the rule that unapproved state-changing actions cannot complete), evidence record claims/sources/attribution, swarm default agents, auto-approve run (compliance only), approval-blocked run, approve-to-unblock, commander review setting correctness, compliance-correctness separation (compliant-but-incorrect is possible), AI never self-certifies correctness, and NLP parsing.
+Results: 43 tests pass (21 swarm + 22 governance), covering agent capabilities, message bus, workflow dependency ordering, approval gating, compliance/correctness separation, evidence-based trust, hierarchical authority, AI non-self-certification, claim/source recording, governance schema validation, and NLP parsing.
 
 Compilation: `python -m py_compile src/swarm/*.py tests/test_swarm.py` — clean.
 
-## 10. Limitations and known issues
+## 11. Limitations and known issues
 
 - **No sandbox/VM isolation** (Section 6). Commands run on the host with user privileges.
 - **CLI statelessness**: each `swarm` invocation creates a fresh in-memory `Swarm`; `add` and `run` in separate processes do not share state. Use a single `run` invocation for a full workflow, or use the programmatic API for persistent state.
@@ -314,7 +362,7 @@ Compilation: `python -m py_compile src/swarm/*.py tests/test_swarm.py` — clean
 - **Correctness is commander-enforced**: the AI never self-certifies correctness (`ai_self_certified_correct` is always `false`). Correctness must be set via `swarm review-task` / `review-action` by the human commander.
 - **No persistence**: state is in-memory only; no `.hydra/`-style durable history or SQLite store is implemented in this package.
 
-## 11. Alignment with existing project principles
+## 12. Alignment with existing project principles
 
 This package follows the conventions and principles in `/home/kaden/Desktop/Agent-Docs/`:
 
@@ -324,6 +372,6 @@ This package follows the conventions and principles in `/home/kaden/Desktop/Agen
 - **Credit & authorship**: attribution to human author; `ai_role` const `"supporting_tool"`; AI framed as supporting tool (AGENTS.md Section 4).
 - **No additional properties**: strict typing via dataclasses; no schema drift (design.md Section 5).
 
-## 12. License
+## 13. License
 
 MIT
