@@ -25,6 +25,8 @@ The swarm enforces a hard separation between **compliance** and **correctness**:
 - Correctness remains `CorrectnessStatus.NOT_ASSESSED` until the human commander reviews.
 - The AI **never self-certifies correctness** (`ai_self_certified_correct` is always `false`). The AI is a supporting tool, not the commander.
 - A task can be `compliant` (procedure followed) but `incorrect` (result wrong). Compliance does not equal correctness.
+- **Evidence-based trust** — trust requires traceable sources and step-by-step reasoning. Syntactic compliance, agreement, confidence, or the AI's own self-critique is not independent verification.
+- **Commander authority** — the human commander alone enforces correctness and final operational authorization. The AI may gather evidence, evaluate a proposal, and report uncertainty, but it never assigns authoritative correctness or approves a state-changing action on its own.
 
 ### 2.1 Core components
 
@@ -328,6 +330,21 @@ The `GovernanceEngine` enforces these at runtime:
 - `commander_review()` — only the Commander may set `correctness`. `reviewed_by` must not be `"ai"` or `"supporting_tool"`.
 - `ai_attempt_support()` — a claim can only be marked `supported`/`partly_supported` if it has `source_ids` AND `reasoning_steps`; otherwise a `GovernanceViolationError` is raised.
 - `ai_propose_result()` — the AI proposes a result with uncertainty but does not set correctness.
+
+The lightweight agent configuration is defined in `docs/agent_governance_schema.json`
+and enforced by `src/swarm/agent_logic.py` (`AgentLogicEnforcer`). It requires:
+
+- `compliance_equals_correctness` to be `false`;
+- trust to be based on primary evidence or empirical reasoning;
+- independent verification;
+- commander approval for every state-changing action;
+- the AI role to remain supportive rather than authoritative.
+
+`AgentLogicEnforcer.evaluate_correctness()` is only an evidence pre-check. Its
+`is_correct` field is not an authoritative correctness certification:
+`correctness_status` remains `not_assessed` and
+`ai_self_certified_correct` remains `false` until the human commander records
+a review.
 - `assert_ai_cannot_self_certify()` — verifies correctness is still `not_assessed` (AI has not touched it).
 - `to_record_dict()` / `validation_errors()` — exports a schema-aligned record and reports structural violations.
 

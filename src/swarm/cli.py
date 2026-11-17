@@ -98,6 +98,22 @@ def _build_parser() -> argparse.ArgumentParser:
     governance = sub.add_parser("governance",
                                 help="Print the full governance record (schema-aligned JSON)")
 
+    governance_check = sub.add_parser("governance-check",
+                                      help="Evaluate a proposal against evidence (compliance != correctness)")
+    governance_check.add_argument("--claim-id", required=True)
+    governance_check.add_argument("--text", required=True)
+    governance_check.add_argument("--syntax-valid", action="store_true")
+    governance_check.add_argument("--instruction-followed", action="store_true")
+    governance_check.add_argument("--causally-sound", action="store_true")
+    governance_check.add_argument("--primary-source", action="append", default=[],
+                                  help="Primary verified source id (repeatable)")
+    governance_check.add_argument("--source-id", action="append", default=[],
+                                  help="Source id (repeatable)")
+
+    governance_load = sub.add_parser("governance-load",
+                                     help="Load and validate an agent governance config JSON file")
+    governance_load.add_argument("--config", required=True)
+
     status = sub.add_parser("status", help="Show swarm status (compliance + correctness)")
     status.add_argument("--workflow", required=True)
 
@@ -362,6 +378,76 @@ def _run_governance(swarm: Swarm, parsed: dict) -> str:
     return json.dumps(swarm.governance.to_record_dict(), indent=2)
 
 
+def _run_governance_check(swarm: Swarm, parsed: dict) -> str:
+    """Evaluate a proposal against evidence (compliance != correctness).
+
+    Uses the AgentLogicEnforcer to demonstrate that surface compliance does
+    not equal correctness and that evidence is required for trust.
+    """
+    from .agent_logic import AgentLogicEnforcer
+
+    enforcer = AgentLogicEnforcer(engine=swarm.governance,
+                                  commander_present=True)
+
+    proposal = {
+        "claim_id": parsed.get("claim_id"),
+        "text": parsed.get("text"),
+        "syntax_valid": parsed.get("syntax_valid", False),
+        "instruction_followed": parsed.get("instruction_followed", False),
+        "causally_sound": parsed.get("causally_sound", False),
+        "action_name": parsed.get("claim_id"),
+    }
+
+    evidence = [
+        {"source_id": sid, "is_primary_source": True, "verified": True}
+        for sid in parsed.get("primary_source", [])
+    ]
+    # Include non-primary sources too (should not count toward trust)
+    for sid in parsed.get("source_id", []):
+        if sid not in parsed.get("primary_source", []):
+            evidence.append({"source_id": sid, "is_primary_source": False, "verified": True})
+
+    eval_res = enforcer.evaluate_correctness(proposal, evidence)
+    return json.dumps(eval_res, indent=2)
+
+
+def _run_governance_load(swarm: Swarm, parsed: dict) -> str:
+    """Load and validate an agent governance config JSON file."""
+    import json as _json
+    config_path = parsed.get("config")
+    try:
+        with open(config_path) as f:
+            config = _json.load(f)
+    except (OSError, _json.JSONDecodeError) as exc:
+        return f"Error loading config {config_path}: {exc}"
+
+    # Validate required structure per agent_governance_schema.json
+    errors = []
+    role = config.get("role_definition", {})
+    if role.get("ai_role") not in ("SUPPORTIVE_TOOL", "ANALYTICAL_ACCELERATOR"):
+        errors.append("role_definition.ai_role must be SUPPORTIVE_TOOL or ANALYTICAL_ACCELERATOR")
+    if role.get("commander_role") not in ("HUMAN_COMMANDER", "FINAL_AUTHORITY"):
+        errors.append("role_definition.commander_role must be HUMAN_COMMANDER or FINAL_AUTHORITY")
+
+    vp = config.get("verification_policy", {})
+    if vp.get("compliance_equals_correctness") is not False:
+        errors.append("verification_policy.compliance_equals_correctness must be false")
+    if vp.get("trust_foundation") not in ("PRIMARY_EVIDENCE", "EMPIRICAL_REASONING"):
+        errors.append("verification_policy.trust_foundation must be PRIMARY_EVIDENCE or EMPIRICAL_REASONING")
+    if vp.get("require_independent_verification") is not True:
+        errors.append("verification_policy.require_independent_verification must be true")
+
+    eg = config.get("execution_gate", {})
+    if eg.get("commander_approval_required") is not True:
+        errors.append("execution_gate.commander_approval_required must be true")
+    if eg.get("action_type") not in ("READ_ONLY_PROPOSAL", "STATE_CHANGING_ACTION"):
+        errors.append("execution_gate.action_type must be READ_ONLY_PROPOSAL or STATE_CHANGING_ACTION")
+
+    if errors:
+        return "GOVERNANCE CONFIG INVALID:\n" + "\n".join(f"  - {e}" for e in errors)
+    return f"GOVERNANCE CONFIG VALID: {config_path} (ai_role={role.get('ai_role')}, commander_role={role.get('commander_role')})"
+
+
 def _run_status(swarm: Swarm, parsed: dict) -> str:
     workflow = parsed.get("workflow", swarm.name)
     summary = swarm.summary()
@@ -544,6 +630,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "governance":
         swarm = Swarm.default_swarm(name="default")
         print(_run_governance(swarm, vars(args)))
+        return 0
+
+    if args.command == "governance-check":
+        swarm = Swarm.default_swarm(name="default")
+        print(_run_governance_check(swarm, vars(args)))
+        return 0
+
+    if args.command == "governance-load":
+        swarm = Swarm.default_swarm(name="default")
+        print(_run_governance_load(swarm, vars(args)))
         return 0
 
     if args.command == "status":

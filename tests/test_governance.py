@@ -3,6 +3,7 @@
 import json
 import pytest
 
+from swarm.agent_logic import AgentLogicEnforcer, GovernanceValidationError
 from swarm.governance import (
     AI_ROLE,
     ComplianceStatus,
@@ -15,6 +16,7 @@ from swarm.governance import (
     SupportStatus,
     _utc_now,
 )
+from swarm.agent_logic import AgentLogicEnforcer
 
 
 def test_engine_initializes_with_active_principles():
@@ -265,3 +267,95 @@ def test_utc_now_returns_iso_string():
     ts = _utc_now()
     assert "T" in ts
     assert "+" in ts or ts.endswith("Z")
+
+
+# ---------------- AgentLogicEnforcer tests ----------------
+
+def test_enforcer_ai_is_not_commander():
+    engine = GovernanceEngine()
+    enforcer = AgentLogicEnforcer(engine=engine, commander_present=True)
+    assert enforcer.commander_present is True
+
+
+def test_evaluate_correctness_compliant_but_incorrect():
+    """Compliance does not equal correctness: compliant proposal with no evidence is rejected."""
+    engine = GovernanceEngine()
+    enforcer = AgentLogicEnforcer(engine=engine, commander_present=True)
+
+    proposal = {
+        "claim_id": "c-1",
+        "text": "some claim",
+        "syntax_valid": True,
+        "instruction_followed": True,
+        "causally_sound": False,
+    }
+    evidence = []  # no primary evidence
+
+    res = enforcer.evaluate_correctness(proposal, evidence)
+    assert res["compliance_status"] == "COMPLIANT_SURFACE"
+    assert res["is_correct"] is False
+    assert res["status"] == "REJECTED"
+    assert "evidence" in res["reason"].lower()
+
+
+def test_evaluate_correctness_correct_with_primary_evidence():
+    engine = GovernanceEngine()
+    enforcer = AgentLogicEnforcer(engine=engine, commander_present=True)
+
+    proposal = {
+        "claim_id": "c-2",
+        "text": "verified claim",
+        "syntax_valid": True,
+        "instruction_followed": True,
+        "causally_sound": True,
+    }
+    evidence = [{"source_id": "s-1", "is_primary_source": True, "verified": True}]
+
+    res = enforcer.evaluate_correctness(proposal, evidence)
+    assert res["is_correct"] is True
+    assert res["compliance_status"] == "COMPLIANT_SURFACE"
+    assert res["evidence_count"] == 1
+
+
+def test_execute_action_requires_commander_approval():
+    """Even a correct proposal pauses without commander approval."""
+    engine = GovernanceEngine()
+    enforcer = AgentLogicEnforcer(engine=engine, commander_present=True)
+
+    proposal = {"action_name": "update_schema", "text": "update"}
+    eval_res = {"is_correct": True, "compliance_status": "COMPLIANT_SURFACE"}
+
+    res = enforcer.execute_action(proposal, eval_res, commander_approval=False)
+    assert res["action_status"] == "PAUSED_AWAITING_COMMANDER"
+    assert res["authorized_by"] is None
+    assert "Commander" in res["message"]
+
+
+def test_execute_action_executes_with_commander_approval():
+    engine = GovernanceEngine()
+    enforcer = AgentLogicEnforcer(engine=engine, commander_present=True)
+
+    proposal = {"action_name": "update_schema", "text": "update"}
+    eval_res = {"is_correct": True, "compliance_status": "COMPLIANT_SURFACE"}
+
+    res = enforcer.execute_action(proposal, eval_res, commander_approval=True)
+    assert res["action_status"] == "EXECUTED"
+    assert res["authorized_by"] == "HUMAN_COMMANDER"
+
+
+def test_execute_action_blocks_incorrect_proposal():
+    engine = GovernanceEngine()
+    enforcer = AgentLogicEnforcer(engine=engine, commander_present=True)
+
+    proposal = {"action_name": "update_schema", "text": "update"}
+    eval_res = {"is_correct": False, "compliance_status": "COMPLIANT_SURFACE"}
+
+    with pytest.raises(GovernanceViolationError):
+        enforcer.execute_action(proposal, eval_res, commander_approval=True)
+
+
+def test_agent_logic_enforcer_importable():
+    from swarm.agent_logic import AgentLogicEnforcer, GovernanceValidationError
+    assert AgentLogicEnforcer is not None
+    assert GovernanceValidationError is not None
+

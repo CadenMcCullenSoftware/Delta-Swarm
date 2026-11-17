@@ -21,6 +21,14 @@ recorded in a structured evidence record aligned with the agent-design schema.
   every source carries access status and limitations.
 - **Attribution:** the AI is framed as a supporting tool, not an autonomous
   decision-maker. Human authorship is recorded explicitly.
+- **Compliance vs. correctness:** procedure-compliant or syntactically valid
+  output is not proof that the result is correct.
+- **Evidence-based trust:** claims require traceable evidence, primary sources
+  when available, and explicit reasoning; agreement or self-critique alone is
+  not independent verification.
+- **Commander authority:** the human commander is the final authority for
+  correctness and operational authorization. The AI may analyze and propose,
+  but does not self-certify correctness or authorize state-changing actions.
 
 ## Installation
 
@@ -58,6 +66,10 @@ swarm approve --action-id action-deploy
   - Declines a pending action and cancels its task.
 - `swarm status --workflow <name>`
   - Prints the swarm summary as JSON (agents, tasks, actions, evidence record).
+- `swarm governance-check --claim-id <id> --text <text> [--syntax-valid] [--instruction-followed] [--causally-sound] [--primary-source <id>...]`
+  - Runs the AI evidence pre-check without self-certifying correctness.
+- `swarm governance-load --config <path>`
+  - Validates a lightweight agent governance configuration.
 
 ## Natural-language (NLP) mode
 

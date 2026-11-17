@@ -1,0 +1,15 @@
+{
+  "role_definition": {
+    "ai_role": "SUPPORTIVE_TOOL",
+    "commander_role": "HUMAN_COMMANDER"
+  },
+  "verification_policy": {
+    "compliance_equals_correctness": false,
+    "trust_foundation": "PRIMARY_EVIDENCE",
+    "require_independent_verification": true
+  },
+  "execution_gate": {
+    "commander_approval_required": true,
+    "action_type": "STATE_CHANGING_ACTION"
+  }
+}

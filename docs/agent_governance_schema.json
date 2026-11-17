@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft-2020-12/schema",
+  "title": "AgentGovernanceConfig",
+  "description": "Lightweight declarative governance config encoding compliance-vs-correctness, evidence-based trust, and commander authority.",
+  "type": "object",
+  "required": ["role_definition", "verification_policy", "execution_gate"],
+  "properties": {
+    "role_definition": {
+      "type": "object",
+      "required": ["ai_role", "commander_role"],
+      "properties": {
+        "ai_role": {
+          "type": "string",
+          "enum": ["SUPPORTIVE_TOOL", "ANALYTICAL_ACCELERATOR"],
+          "description": "The AI is a supportive analytical instrument, never the commander or an autonomous decision-maker."
+        },
+        "commander_role": {
+          "type": "string",
+          "enum": ["HUMAN_COMMANDER", "FINAL_AUTHORITY"],
+          "description": "Correctness and final operational authorization are enforced by the human commander."
+        }
+      },
+      "additionalProperties": false
+    },
+    "verification_policy": {
+      "type": "object",
+      "required": ["compliance_equals_correctness", "trust_foundation", "require_independent_verification"],
+      "properties": {
+        "compliance_equals_correctness": {
+          "type": "boolean",
+          "const": false,
+          "description": "Behavioral compliance (literal prompt adherence) does not equal correctness."
+        },
+        "trust_foundation": {
+          "type": "string",
+          "enum": ["PRIMARY_EVIDENCE", "EMPIRICAL_REASONING"],
+          "description": "Trust is grounded strictly in verifiable evidence, primary sources, calculations, and causal reasoning."
+        },
+        "require_independent_verification": {
+          "type": "boolean",
+          "const": true,
+          "description": "Self-critique or sycophantic agreement do not constitute verification."
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution_gate": {
+      "type": "object",
+      "required": ["commander_approval_required", "action_type"],
+      "properties": {
+        "commander_approval_required": {
+          "type": "boolean",
+          "const": true,
+          "description": "All state-changing or consequential actions require explicit prior approval from the commander."
+        },
+        "action_type": {
+          "type": "string",
+          "enum": ["READ_ONLY_PROPOSAL", "STATE_CHANGING_ACTION"],
+          "description": "The class of action being gated."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
