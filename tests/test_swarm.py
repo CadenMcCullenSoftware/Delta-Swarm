@@ -11,6 +11,7 @@ from swarm.agent import (
 )
 from swarm.cli import parse_nlp
 from swarm.gate import ApprovalGate
+from swarm.governance import GovernanceEngine, GovernanceViolationError
 from swarm.record import EvidenceRecord
 from swarm.swarm import Swarm
 from swarm.types import (
@@ -258,3 +259,31 @@ def test_nlp_add_and_run():
     p2 = parse_nlp("run workflow wf auto-approve")
     out2 = handle_nlp(swarm, p2)
     assert "auto_approve=True" in out2 or "auto_approve = True" in out2 or "Ran workflow wf" in out2
+
+
+def test_governance_compliance_never_implies_correctness():
+    engine = GovernanceEngine(human_author="Caden")
+    engine.draft_action("a-1", "deploy", "Deploy release")
+    engine.grant_compliance("a-1", "commander", "release")
+    action = engine.actions["a-1"]
+    assert action.compliance_status == ComplianceStatus.COMPLIANT
+    assert action.correctness_status == CorrectnessStatus.NOT_ASSESSED
+
+
+def test_governance_requires_evidence_and_reasoning_for_supported_claim():
+    engine = GovernanceEngine(human_author="Caden")
+    engine.add_claim("c-1", "The build passed")
+    with pytest.raises(GovernanceViolationError):
+        engine.ai_attempt_support("c-1", "supported")
+
+
+def test_governance_ai_cannot_enforce_correctness():
+    engine = GovernanceEngine(human_author="Caden")
+    with pytest.raises(GovernanceViolationError):
+        engine.commander_review(
+            review_id="r-1",
+            reviewed_by="ai",
+            target_id="a-1",
+            target_type="action",
+            correctness="correct",
+        )

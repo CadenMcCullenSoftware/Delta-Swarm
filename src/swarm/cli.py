@@ -72,6 +72,32 @@ def _build_parser() -> argparse.ArgumentParser:
     review_action.add_argument("--notes", default=None)
     review_action.add_argument("--commander-override", action="store_true")
 
+    add_claim = sub.add_parser("add-claim",
+                               help="AI proposes a claim with evidence metadata")
+    add_claim.add_argument("--claim-id", required=True)
+    add_claim.add_argument("--text", required=True)
+    add_claim.add_argument("--epistemic-status", default="unknown",
+                           choices=["source_reported_fact", "direct_observation",
+                                    "calculation", "inference",
+                                    "causal_hypothesis",
+                                    "opinion_or_recommendation", "unknown"])
+    add_claim.add_argument("--source-ids", nargs="*", default=[])
+    add_claim.add_argument("--uncertainty", default="")
+    add_claim.add_argument("--verification-criterion", default=None)
+
+    add_source = sub.add_parser("add-source",
+                                help="Add an evidence source")
+    add_source.add_argument("--source-id", required=True)
+    add_source.add_argument("--title", required=True)
+    add_source.add_argument("--access-status", default="not_checked")
+    add_source.add_argument("--source-category", default="other")
+
+    validate = sub.add_parser("validate",
+                              help="Validate governance record against schema")
+
+    governance = sub.add_parser("governance",
+                                help="Print the full governance record (schema-aligned JSON)")
+
     status = sub.add_parser("status", help="Show swarm status (compliance + correctness)")
     status.add_argument("--workflow", required=True)
 
@@ -288,6 +314,54 @@ def _run_review_action(swarm: Swarm, parsed: dict) -> str:
     return (f"Commander {reviewed_by} reviewed action {action_id}: correctness={correctness}.")
 
 
+def _run_add_claim(swarm: Swarm, parsed: dict) -> str:
+    """AI proposes a claim with evidence metadata (evidence-based trust).
+
+    The AI sets epistemic_status, uncertainty, sources, and reasoning steps,
+    but support_status starts as UNVERIFIED. The AI may not self-certify
+    support.
+    """
+    claim_id = parsed.get("claim_id")
+    text = parsed.get("text")
+    if not claim_id or not text:
+        return "Error: --claim-id and --text are required."
+    swarm.governance.add_claim(
+        claim_id=claim_id,
+        text=text,
+        epistemic_status=parsed.get("epistemic_status", "unknown"),
+        source_ids=parsed.get("source_ids", []),
+        uncertainty=parsed.get("uncertainty", ""),
+        verification_criterion=parsed.get("verification_criterion"),
+    )
+    return (f"AI proposed claim {claim_id}. support_status=unverified "
+            f"(AI does not self-certify support; evidence required).")
+
+
+def _run_add_source(swarm: Swarm, parsed: dict) -> str:
+    source_id = parsed.get("source_id")
+    title = parsed.get("title")
+    if not source_id or not title:
+        return "Error: --source-id and --title are required."
+    swarm.governance.add_source(
+        source_id=source_id,
+        title=title,
+        access_status=parsed.get("access_status", "not_checked"),
+        source_category=parsed.get("source_category", "other"),
+    )
+    return f"Added source {source_id}: {title}"
+
+
+def _run_validate(swarm: Swarm, parsed: dict) -> str:
+    errors = swarm.governance.validation_errors()
+    if errors:
+        return "GOVERNANCE VALIDATION FAILED:\n" + "\n".join(f"  - {e}" for e in errors)
+    return "GOVERNANCE VALIDATION PASSED: record conforms to governance schema."
+
+
+def _run_governance(swarm: Swarm, parsed: dict) -> str:
+    return json.dumps(swarm.governance.to_record_dict(), indent=2)
+
+
 def _run_status(swarm: Swarm, parsed: dict) -> str:
     workflow = parsed.get("workflow", swarm.name)
     summary = swarm.summary()
@@ -450,6 +524,26 @@ def main(argv: list[str] | None = None) -> int:
             "compliance": args.compliance,
             "note": "Commander enforced correctness; AI did not self-certify.",
         }, indent=2))
+        return 0
+
+    if args.command == "add-claim":
+        swarm = Swarm.default_swarm(name="default")
+        print(_run_add_claim(swarm, vars(args)))
+        return 0
+
+    if args.command == "add-source":
+        swarm = Swarm.default_swarm(name="default")
+        print(_run_add_source(swarm, vars(args)))
+        return 0
+
+    if args.command == "validate":
+        swarm = Swarm.default_swarm(name="default")
+        print(_run_validate(swarm, vars(args)))
+        return 0
+
+    if args.command == "governance":
+        swarm = Swarm.default_swarm(name="default")
+        print(_run_governance(swarm, vars(args)))
         return 0
 
     if args.command == "status":

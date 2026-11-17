@@ -1,0 +1,214 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/swarm-governance.schema.json",
+  "title": "Swarm Governance Architecture",
+  "description": "Formal schema encoding the three governing principles: (1) Compliance vs. Correctness, (2) Evidence-Based Trust, (3) Hierarchical Authority (Commander-enforced correctness; AI is subordinate executor, never self-certifies).",
+  "version": "1.0.0",
+
+  "definitions": {
+    "principle_id": {
+      "type": "string",
+      "enum": [
+        "compliance_vs_correctness",
+        "evidence_based_trust",
+        "hierarchical_authority"
+      ]
+    },
+
+    "compliance_status": {
+      "type": "string",
+      "enum": ["compliant", "non_compliant", "not_assessed"],
+      "description": "Whether the required procedure was followed (approval, scope, prior-to-execution). Compliance does NOT imply correctness."
+    },
+
+    "correctness_status": {
+      "type": "string",
+      "enum": ["correct", "incorrect", "uncertain", "not_assessed"],
+      "description": "Whether the result is evidence-supported and logically valid. Enforced ONLY by the Commander; the AI must never self-certify."
+    },
+
+    "epistemic_status": {
+      "type": "string",
+      "enum": [
+        "source_reported_fact",
+        "direct_observation",
+        "calculation",
+        "inference",
+        "causal_hypothesis",
+        "opinion_or_recommendation",
+        "unknown"
+      ]
+    },
+
+    "support_status": {
+      "type": "string",
+      "enum": [
+        "supported",
+        "partly_supported",
+        "unsupported",
+        "conflicting_evidence",
+        "unverified",
+        "not_applicable"
+      ]
+    },
+
+    "ai_role": {
+      "const": "supporting_tool",
+      "description": "The AI is a supporting tool, never an autonomous arbiter of truth or commander."
+    },
+
+    "reasoning_step": {
+      "type": "object",
+      "required": ["step_id", "description", "evidence_ids", "conclusion"],
+      "properties": {
+        "step_id": {"type": "string"},
+        "description": {"type": "string"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "conclusion": {"type": "string"},
+        "uncertainty": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+
+    "claim": {
+      "type": "object",
+      "required": ["claim_id", "text", "epistemic_status", "support_status", "source_ids", "reasoning_steps", "verification_criterion"],
+      "properties": {
+        "claim_id": {"type": "string"},
+        "text": {"type": "string"},
+        "epistemic_status": {"$ref": "#/definitions/epistemic_status"},
+        "support_status": {"$ref": "#/definitions/support_status"},
+        "source_ids": {"type": "array", "items": {"type": "string"}},
+        "reasoning_steps": {"type": "array", "items": {"$ref": "#/definitions/reasoning_step"}},
+        "uncertainty": {"type": "string"},
+        "verification_criterion": {"type": "string"},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+
+    "source": {
+      "type": "object",
+      "required": ["source_id", "title", "access_status", "source_category"],
+      "properties": {
+        "source_id": {"type": "string"},
+        "title": {"type": "string"},
+        "author_or_publisher": {"type": ["string", "null"]},
+        "url": {"type": ["string", "null"]},
+        "publication_date": {"type": ["string", "null"]},
+        "accessed_date": {"type": ["string", "null"]},
+        "access_status": {"type": "string"},
+        "source_category": {"type": "string"},
+        "claims_supported": {"type": "array", "items": {"type": "string"}},
+        "support_summary": {"type": "string"},
+        "units_and_baseline_checked": {"type": "boolean"},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+
+    "action": {
+      "type": "object",
+      "required": ["action_id", "action_type", "external_or_state_changing", "compliance_status", "correctness_status", "commander_reviewed"],
+      "properties": {
+        "action_id": {"type": "string"},
+        "action_type": {"type": "string"},
+        "external_or_state_changing": {"type": "boolean"},
+        "compliance_status": {"$ref": "#/definitions/compliance_status"},
+        "correctness_status": {"$ref": "#/definitions/correctness_status"},
+        "compliance_reasoning": {"type": "string"},
+        "correctness_reasoning": {"type": "string"},
+        "commander_reviewed": {"type": "boolean"},
+        "commander_reviewed_at": {"type": ["string", "null"]},
+        "reversibility": {"type": "string"},
+        "effects": {"type": "array", "items": {"type": "string"}},
+        "side_effects": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+
+    "evidence_review": {
+      "type": "object",
+      "required": ["review_id", "reviewed_by", "reviewed_at", "target_id", "target_type", "compliance_assessment", "correctness_assessment", "reasoning"],
+      "properties": {
+        "review_id": {"type": "string"},
+        "reviewed_by": {"type": "string"},
+        "reviewed_at": {"type": "string"},
+        "target_id": {"type": "string"},
+        "target_type": {"enum": ["task", "action", "claim"]},
+        "compliance_assessment": {"$ref": "#/definitions/compliance_status"},
+        "correctness_assessment": {"$ref": "#/definitions/correctness_status"},
+        "reasoning": {"type": "string"},
+        "commander_override": {"type": "boolean"},
+        "notes": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+
+    "attribution": {
+      "type": "object",
+      "required": ["human_author", "attribution_basis", "ai_role"],
+      "properties": {
+        "human_author": {"type": ["string", "null"]},
+        "attribution_basis": {"type": "string"},
+        "ai_role": {"$ref": "#/definitions/ai_role"},
+        "notes": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "type": "object",
+  "required": ["schema_version", "governance", "record"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0.0"},
+
+    "governance": {
+      "type": "object",
+      "description": "The three governing principles, declared as active constraints.",
+      "required": ["principles", "authority_model"],
+      "properties": {
+        "principles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["principle_id", "active", "description"],
+            "properties": {
+              "principle_id": {"$ref": "#/definitions/principle_id"},
+              "active": {"type": "boolean"},
+              "description": {"type": "string"}
+            },
+            "additionalProperties": false
+          },
+          "minItems": 3,
+          "uniqueItems": true
+        },
+        "authority_model": {
+          "type": "object",
+          "required": ["commander_is_sole_correctness_authority", "ai_may_not_self_certify_correctness", "ai_role"],
+          "properties": {
+            "commander_is_sole_correctness_authority": {"type": "boolean", "const": true},
+            "ai_may_not_self_certify_correctness": {"type": "boolean", "const": true},
+            "ai_role": {"$ref": "#/definitions/ai_role"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "record": {
+      "type": "object",
+      "required": ["claims", "sources", "actions", "attribution", "evidence_reviews"],
+      "properties": {
+        "claims": {"type": "array", "items": {"$ref": "#/definitions/claim"}},
+        "sources": {"type": "array", "items": {"$ref": "#/definitions/source"}},
+        "actions": {"type": "array", "items": {"$ref": "#/definitions/action"}},
+        "attribution": {"$ref": "#/definitions/attribution"},
+        "evidence_reviews": {"type": "array", "items": {"$ref": "#/definitions/evidence_review"}}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

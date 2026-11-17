@@ -1,9 +1,15 @@
 """Swarm coordinator: orchestrates agents across workflow tasks.
 
-Enforces the separation between compliance (procedure followed: approval,
-scope, prior-to-execution) and correctness (evidence-supported result).
-Compliance does not equal correctness. Correctness is enforced by the human
-commander; the AI does not self-certify correctness.
+Integrates the GovernanceEngine, which formally enforces the three governing
+principles defined in docs/governance.schema.json:
+
+1. Compliance vs. Correctness — compliance (procedure followed) is tracked
+   separately from correctness (evidence-supported result). Compliance does
+   NOT imply correctness.
+2. Evidence-Based Trust — every assertion/claim must carry explicit evidence
+   (source_ids) and step-by-step reasoning (reasoning_steps).
+3. Hierarchical Authority — the Commander is the sole authority for enforcing
+   correctness; the AI is a subordinate executor and never self-certifies.
 """
 
 from __future__ import annotations
@@ -14,32 +20,38 @@ from typing import Callable
 
 from .agent import Agent, CoordinatorAgent, PlannerAgent, ReviewerAgent, WorkerAgent
 from .gate import ApprovalGate
-from .message_bus import MessageBus
-from .record import EvidenceRecord
-from .types import (
-    ActionType,
+from .governance import (
+    AI_ROLE,
     ComplianceStatus,
     CorrectnessStatus,
-    Reversibility,
-    TaskStatus,
+    EpistemicStatus,
+    EvidenceReviewRecord,
+    GovernanceEngine,
+    SupportStatus,
+    _utc_now,
 )
+from .message_bus import MessageBus
+from .record import EvidenceRecord
+from .types import ActionType, Reversibility, TaskStatus
 from .workflow import Workflow
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class Swarm:
     """Multi-agent swarm that executes workflows under user-controlled gating."""
 
     def __init__(self, name: str, human_author: str | None = None,
-                 auto_approve: bool = False) -> None:
+                 auto_approve: bool = False,
+                 schema_path: str | None = None) -> None:
         self.name = name
         self.bus = MessageBus()
         self.workflow = Workflow(name)
         self.gate = ApprovalGate()
         self.record = EvidenceRecord(human_author=human_author)
+        # GovernanceEngine is the authoritative source for compliance,
+        # correctness, and evidence-based trust.
+        self.governance = GovernanceEngine(
+            human_author=human_author, schema_path=schema_path
+        )
         self._agents: dict[str, Agent] = {}
         # auto_approve is a commander opt-in for COMPLIANCE only. It never
         # self-certifies correctness.
@@ -63,6 +75,27 @@ class Swarm:
             identifier=task.task_id,
             risk_review="Workflow task definition",
         )
+        # Register a governance action for state-changing/approval tasks so
+        # compliance and correctness are tracked from the start.
+        if task.requires_approval:
+            self.governance.draft_action(
+                action_id=f"action-{task.task_id}",
+                action_type=ActionType.OTHER,
+                summary=task.name,
+                external_or_state_changing=True,
+                target=task.working_directory,
+                reversibility=Reversibility.UNKNOWN,
+            )
+            self.gate.draft(
+                action_id=f"action-{task.task_id}",
+                action_type=ActionType.OTHER,
+                summary=task.name,
+                target=task.working_directory,
+                external_or_state_changing=True,
+                inputs=list(task.command),
+                reversibility=Reversibility.UNKNOWN,
+            )
+            self.gate.request_approval(f"action-{task.task_id}", "user", task.name)
 
     def set_action_handler(self, handler: Callable[[str, str], None]) -> None:
         self._on_action = handler
@@ -100,26 +133,27 @@ class Swarm:
                 combined = f"{result}\n{command_result}"
             self.workflow.mark(task.task_id, TaskStatus.COMPLETED, result=combined)
         agent.report(task.task_id, combined if not error else "", error)
-        # Task execution complete: compliance may be set, but correctness is
-        # intentionally left NOT_ASSESSED until the human commander reviews.
-        # The AI does not self-certify correctness.
+        # AI proposes a result but does NOT self-certify correctness.
+        # Correctness stays NOT_ASSESSED until the Commander reviews.
+        if task.requires_approval:
+            self.governance.ai_propose_result(
+                action_id=f"action-{task.task_id}",
+                result=combined if not error else "",
+                uncertainty="not_assessed" if not error else "error",
+            )
 
     def _execute_task(self, task, agent: Agent) -> None:
         if task.requires_approval:
-            self.gate.draft(
-                action_id=f"action-{task.task_id}",
-                action_type=ActionType.OTHER,
-                summary=task.name,
-                target=task.working_directory,
-                external_or_state_changing=True,
-                inputs=list(task.command),
-                reversibility=Reversibility.UNKNOWN,
-            )
-            self.gate.request_approval(f"action-{task.task_id}", "user", task.name)
             if self._auto_approve:
                 # Commander-opted compliance only. Correctness stays
                 # NOT_ASSESSED; the AI does not self-certify.
                 self.gate.approve(f"action-{task.task_id}")
+                self.governance.grant_compliance(
+                    action_id=f"action-{task.task_id}",
+                    approver="commander(auto_approve)",
+                    scope=task.name,
+                    reasoning="auto_approve flag set by commander",
+                )
                 task.compliance_status = ComplianceStatus.COMPLIANT
             else:
                 self.workflow.mark(task.task_id, TaskStatus.BLOCKED)
@@ -175,6 +209,13 @@ class Swarm:
         task = self.workflow.get_task(task_id)
         if task:
             task.compliance_status = ComplianceStatus.COMPLIANT
+        # Record compliance in governance engine
+        self.governance.grant_compliance(
+            action_id=action_id,
+            approver="commander",
+            scope=task.name if task else action_id,
+            reasoning="manual approve_action",
+        )
         if task and task.status == TaskStatus.BLOCKED:
             agent = self._select_agent(task)
             if agent:
@@ -186,6 +227,11 @@ class Swarm:
         task = self.workflow.get_task(task_id)
         if task:
             self.workflow.mark(task_id, TaskStatus.CANCELLED)
+        self.governance.record_compliance(
+            action_id=action_id,
+            compliant=False,
+            reasoning="Action declined by commander",
+        )
 
     def commander_review_task(self, review_id: str, reviewed_by: str,
                               task_id: str, correctness: str,
@@ -198,8 +244,6 @@ class Swarm:
         The AI must not call this to self-certify. Only the human commander
         may mark a task correct/incorrect/uncertain.
         """
-        from .types import ComplianceStatus, CorrectnessStatus
-
         task = self.workflow.get_task(task_id)
         if task is None:
             raise ValueError(f"Unknown task {task_id}")
@@ -213,6 +257,19 @@ class Swarm:
             reasoning=reasoning,
             notes=notes,
             commander_override=commander_override,
+        )
+
+        # Enforce via governance engine (Commander is sole correctness authority)
+        self.governance.commander_review(
+            review_id=review_id,
+            reviewed_by=reviewed_by,
+            target_id=task_id,
+            target_type="task",
+            correctness=correctness,
+            compliance=compliance,
+            reasoning=reasoning,
+            commander_override=commander_override,
+            notes=notes,
         )
 
         task.commander_reviewed = True
@@ -237,8 +294,6 @@ class Swarm:
                                 notes: str | None = None,
                                 commander_override: bool = False) -> None:
         """Human commander enforces correctness on an action."""
-        from .types import ComplianceStatus, CorrectnessStatus
-
         action = self.gate.get(action_id)
         if action is None:
             raise ValueError(f"Unknown action {action_id}")
@@ -255,6 +310,18 @@ class Swarm:
             target_type="action",
             compliance_assessment=compliance,
             correctness_assessment=correctness,
+            reasoning=reasoning,
+            commander_override=commander_override,
+            notes=notes,
+        )
+
+        self.governance.commander_review(
+            review_id=review_id,
+            reviewed_by=reviewed_by,
+            target_id=action_id,
+            target_type="action",
+            correctness=correctness,
+            compliance=compliance,
             reasoning=reasoning,
             commander_override=commander_override,
             notes=notes,
@@ -283,6 +350,8 @@ class Swarm:
                 for a in self.gate.all()
             },
             "record": self.record.compliance_correctness_summary(),
+            "governance": self.governance.to_record_dict(),
+            "governance_validation_errors": self.governance.validation_errors(),
         }
 
     @classmethod
