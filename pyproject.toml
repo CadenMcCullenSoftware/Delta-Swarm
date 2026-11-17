@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swarm"
+version = "1.0.0"
+description = "Multi-agent swarm system for user-controlled workflow execution"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Caden McCullen" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]
+
+[project.scripts]
+swarm = "swarm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
