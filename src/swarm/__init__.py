@@ -11,7 +11,3 @@ __all__ = [
     "GovernanceValidationError",
     "GovernanceViolationError",
 ]
-
-from .governance import GovernanceEngine, GovernanceViolationError
-
-__all__ = ["GovernanceEngine", "GovernanceViolationError"]
