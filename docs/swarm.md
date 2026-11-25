@@ -319,37 +319,17 @@ s.commander_review_task(
 )
 ```
 
-### 8.5 Commander review examples
+### 8.5 Reviews and governance records
 
-```bash
-# Commander marks a task correct (evidence-supported):
-swarm review-task --task-id build --correctness correct --reviewed-by "Caden McCullen" --reasoning "output matches expected"
+Use `commander_review_task()` or `commander_review_action()` on the same
+`Swarm` instance that ran the workflow. The standalone CLI review commands
+start with a fresh swarm and cannot review state from an earlier invocation.
 
-# Commander marks an action incorrect despite compliance:
-swarm review-action --action-id action-deploy --correctness incorrect --reviewed-by "Caden McCullen" --reasoning "result wrong though procedure followed"
-```
-
-### 8.6 Governance CLI commands
-
-```bash
-# AI proposes a claim with evidence metadata (evidence-based trust):
-swarm add-claim --claim-id c-1 --text "The sky is blue" \
-  --epistemic-status direct_observation \
-  --source-ids s-1 \
-  --uncertainty "low" \
-  --verification-criterion "direct observation"
-
-# Add an evidence source:
-swarm add-source --source-id s-1 --title "NIST AI RMF" \
-  --access-status opened_and_reviewed \
-  --source-category government_publication
-
-# Validate the governance record against the schema:
-swarm validate
-
-# Print the full governance record (schema-aligned JSON):
-swarm governance
-```
+`governance-load` validates a configuration file, and `governance-check`
+evaluates a supplied proposal. `add-claim`, `add-source`, `governance`, and
+`validate` each operate on a fresh in-memory record when run as separate CLI
+commands. Use the Python API to create and validate a record across multiple
+steps.
 
 ## 9. Governance Engine & JSON Schema
 
@@ -401,23 +381,27 @@ Run the full suite:
 python -m pytest tests/ -v
 ```
 
-Results: 43 tests pass (21 swarm + 22 governance), covering agent capabilities, message bus, workflow dependency ordering, approval gating, compliance/correctness separation, evidence-based trust, hierarchical authority, AI non-self-certification, claim/source recording, governance schema validation, and NLP parsing.
+Results on 2026-11-25: 50 tests pass, covering agent capabilities, message bus,
+workflow dependency ordering, approval gating, compliance/correctness
+separation, evidence-based trust, hierarchical authority, AI
+non-self-certification, claim/source recording, governance schema validation,
+and NLP parsing.
 
 Compilation: `python -m py_compile src/swarm/*.py tests/test_swarm.py` — clean.
 
 ## 11. Limitations and known issues
 
 - **No sandbox/VM isolation** (Section 6). Commands run on the host with user privileges.
-- **CLI statelessness**: each `swarm` invocation creates a fresh in-memory `Swarm`; `add` and `run` in separate processes do not share state. Use a single `run` invocation for a full workflow, or use the programmatic API for persistent state.
+- **CLI statelessness**: each `swarm` invocation creates a fresh in-memory `Swarm`; stateful commands do not share state across processes. Use the Python API in one process or the `swarm nlp` REPL for a multi-step workflow. Durable CLI state is not included.
 - **NLP parsing is best-effort**: regex/shlex-based; complex or ambiguous sentences may fail. Type `help` for examples.
 - **Failure handling**: `stop` halts the dependency loop on the first failed task; dependent tasks remain `PENDING` (not executed). `continue` is accepted as a value but the loop currently breaks on any failure regardless; this should be aligned with the documented policy if `continue` semantics are required.
-- **Approval callback**: `set_action_handler` is invoked for blocked tasks; in CLI `run` mode it prints a message but does not wait for input — use `swarm approve --action-id <id>` in a separate step.
+- **Approval callback**: `set_action_handler` is invoked for blocked tasks; in CLI `run` mode it prints a message but does not wait for input. Approve through the same in-process API instance or the NLP REPL.
 - **Correctness is commander-enforced**: the AI never self-certifies correctness (`ai_self_certified_correct` is always `false`). Correctness must be set via `swarm review-task` / `review-action` by the human commander.
 - **No persistence**: state is in-memory only; no `.hydra/`-style durable history or SQLite store is implemented in this package.
 
 ## 12. Alignment with existing project principles
 
-This package follows the conventions and principles in `/home/kaden/Desktop/Agent-Docs/`:
+This package follows the conventions and principles summarized in the included governance documents:
 
 - **Operational tone**: neutral, technical, concise, direct; no unrequested interpretation (AGENTS.md Section 1).
 - **Automation gating**: explicit user confirmation before state-changing actions; pre-action checklist (AGENTS.md Section 2).

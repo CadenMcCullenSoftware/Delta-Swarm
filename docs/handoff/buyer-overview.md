@@ -13,8 +13,14 @@ procedural compliance; a human commander separately reviews correctness.
 
 The current source includes the Python package, command-line interface,
 governance configuration and schemas, terminology glossary, and governance
-guides. The source repository history should be provided through GitHub access
-or a Git bundle; a source archive by itself does not contain commit history.
+guides. Workflow state is in memory. Separate CLI invocations do not share
+tasks or evidence; use the Python API in one process or the `swarm nlp` REPL
+for a multi-step workflow. Persistent CLI state is not included. In particular,
+`swarm validate` checks a fresh default record; it cannot validate claims added
+by a previous CLI invocation.
+
+The source repository history should be provided through GitHub access or a
+Git bundle; a source archive by itself does not contain commit history.
 
 ## Setup and verification
 

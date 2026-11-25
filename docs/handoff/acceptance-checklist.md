@@ -24,8 +24,10 @@ commit hash so the verified source is identifiable.
 - [ ] Parse both JSON schemas and the example configuration with
   `python -m json.tool`.
 - [ ] Run `swarm governance-load --config docs/agent_governance_config.example.json`.
-- [ ] Run `swarm validate` and `swarm --help`.
-- [ ] Run an agreed smoke workflow and record its output and status.
+- [ ] Run `swarm validate` and `swarm --help`. Note that `validate` checks a
+  fresh default record; separate CLI invocations do not share state.
+- [ ] Run an agreed smoke workflow through the Python API in one process and
+  record its output and status.
 - [ ] Inspect the delivered source for local secrets and unrelated editor or
   build artifacts.
 

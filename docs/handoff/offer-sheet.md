@@ -15,9 +15,9 @@
 
 1. Provide access to the agreed tagged Swarm source and its full Git history.
 2. Help the buyer install the package in one agreed Python 3.10+ environment.
-3. Configure and verify one buyer-approved local workflow using the current
-   package interfaces. The buyer supplies the commands and confirms the target
-   environment and permissions.
+3. Configure and verify one buyer-approved local workflow through the Python
+   API in one process. The buyer supplies the commands and confirms the target
+   environment and permissions. Persistent CLI state is not included.
 4. Deliver a verification record listing the exact tag and commit, commands
    run, results, known limitations, and outstanding issues.
 5. Hold a handoff review and obtain the buyer's written acceptance or issue
