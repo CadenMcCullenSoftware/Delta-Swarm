@@ -1,26 +1,33 @@
 # Buyer Handoff Overview
 
-**Draft prepared:** 2026-11-25  
-**Candidate version:** `1.0.0` (from `pyproject.toml`; annotated tag `v1.0.0`
-created locally, push pending GitHub credentials)
+**Status:** Draft for review; not an offer or statement of work.
+
+**Prepared:** 2026-11-25
+
+**Release:** `v1.0.1` (package metadata version `1.0.1`; record the full tag
+commit with `git rev-parse v1.0.1` after publication)
+
+Repository: [CadenMcCullenSoftware/Delta-Swarm](https://github.com/CadenMcCullenSoftware/Delta-Swarm)
 
 ## What Swarm does
 
-Swarm is a local Python workflow orchestrator. It runs configured task commands
-in dependency order, records workflow and evidence data in memory, and can
-require an explicit human approval before marked actions run. Approval records
-procedural compliance; a human commander separately reviews correctness.
+Swarm is a local Python workflow orchestrator. It runs configured task
+commands in dependency order, records workflow and evidence data in memory,
+and can require explicit human approval before marked actions run. Approval
+records procedural compliance; a human commander separately reviews
+correctness.
 
 The current source includes the Python package, command-line interface,
 governance configuration and schemas, terminology glossary, and governance
 guides. Workflow state is in memory. Separate CLI invocations do not share
 tasks or evidence; use the Python API in one process or the `swarm nlp` REPL
-for a multi-step workflow. Persistent CLI state is not included. In particular,
-`swarm validate` checks a fresh default record; it cannot validate claims added
-by a previous CLI invocation.
+for a multi-step workflow. Persistent CLI state is not included. In
+particular, `swarm validate` checks a fresh default record; it cannot validate
+claims added by a previous CLI invocation.
 
-The source repository history should be provided through GitHub access or a
-Git bundle; a source archive by itself does not contain commit history.
+Commands run on the host with the invoking user's privileges. The package
+does not provide sandboxing, container or VM isolation, network isolation, or
+resource limits.
 
 ## Setup and verification
 
@@ -29,6 +36,8 @@ Requirements: Python 3.10 or newer and pip.
 ```bash
 git clone https://github.com/CadenMcCullenSoftware/Delta-Swarm.git
 cd Delta-Swarm
+git checkout v1.0.1
+git rev-parse HEAD
 python -m pip install -e '.[dev]'
 python -m py_compile src/swarm/*.py
 python -m pytest tests/ -v
@@ -40,10 +49,10 @@ swarm validate
 swarm --help
 ```
 
-The release-candidate verification on 2026-11-25 passed all 50 tests, bytecode
-compilation, JSON parsing, the governance config load, schema validation, CLI
-help, and a `Swarm.default_swarm(...).run()` smoke check. Repeat these checks on
-the delivered tag and record that tag's commit hash in the acceptance record.
+Run the complete command list on the delivered tag and record the actual
+results, Python version, operating system, and full commit hash in the
+acceptance record. The expected test count is not a substitute for the
+recorded test output.
 
 ## Included scope and boundaries
 
@@ -61,11 +70,10 @@ separate scope and acceptance criteria.
 
 ## Access, license, and ownership status
 
-The repository metadata and README declare MIT, and a `LICENSE` file (MIT,
-rightsholder Caden McCullen) has been added to the tree. GitHub access for a
-buyer has not been provisioned or confirmed (push pending credentials).
-Resolve access before granting buyer access or delivering a tagged source
-bundle.
+The repository is public on GitHub and includes an MIT `LICENSE` identifying
+Caden McCullen as copyright holder. Confirm the license and any buyer-specific
+terms before delivery. A source archive does not contain Git history; provide
+the tagged repository or an agreed Git bundle when full history is required.
 
 No terms for ownership or licensing of custom configuration, implementation,
 or other buyer-specific work are defined in this repository. Put those terms

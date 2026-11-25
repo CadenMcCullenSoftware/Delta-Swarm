@@ -16,7 +16,8 @@ commit hash so the verified source is identifiable.
 
 ## Independent setup and verification
 
-- [ ] Clone or unpack the agreed tag; record tag and full commit hash.
+- [ ] Check out the agreed tag (`v1.0.1`); record tag and full commit hash.
+- [ ] Confirm package metadata reports `1.0.1`.
 - [ ] Record Python and operating-system versions.
 - [ ] Install using `python -m pip install -e '.[dev]'`.
 - [ ] Run `python -m py_compile src/swarm/*.py` successfully.
