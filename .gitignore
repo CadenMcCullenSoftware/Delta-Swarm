@@ -5,3 +5,6 @@ __pycache__/
 build/
 dist/
 *.egg-link
+.pytest_cache/
+.vscode/
+.DS_Store
