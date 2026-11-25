@@ -84,7 +84,7 @@ swarm nlp
 
 Examples (type at the `swarm>` prompt):
 
-```
+```text
 add task build command echo hello
 add task test command pytest depends on build approval
 run workflow release auto-approve
