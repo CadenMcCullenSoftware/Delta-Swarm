@@ -33,24 +33,22 @@ recorded in a structured evidence record aligned with the agent-design schema.
 ## Installation
 
 ```bash
-pip install -e .
+python -m pip install -e '.[dev]'
 ```
 
 ## Quick start
 
-```bash
-# Initialize and add tasks to a workflow
-swarm add --workflow release --task-id build --name build --command python -m build
-swarm add --workflow release --task-id test --name test --command python -m pytest --depends-on build
-swarm add --workflow release --task-id deploy --name deploy --command ./deploy.sh --depends-on test --requires-approval
+```python
+from swarm.swarm import Swarm
+from swarm.types import Task
 
-# Run the workflow (auto-approve all actions)
-swarm run --workflow release --auto-approve
-
-# Run with manual approval gating
-swarm run --workflow release
-# Approve pending actions when ready
-swarm approve --action-id action-deploy
+swarm = Swarm.default_swarm(name="release")
+swarm.add_task(Task(
+    task_id="hello",
+    name="hello",
+    command=["python", "-c", "print('hello')"],
+))
+print(swarm.run())
 ```
 
 ## Command reference
@@ -70,6 +68,11 @@ swarm approve --action-id action-deploy
   - Runs the AI evidence pre-check without self-certifying correctness.
 - `swarm governance-load --config <path>`
   - Validates a lightweight agent governance configuration.
+
+Workflow and evidence state is in memory. Each separate CLI invocation creates
+a new swarm, so `add` followed by `run`, or `run` followed by `approve` or
+`status`, does not share state. Use the Python API in one process or the `swarm
+nlp` REPL for a multi-step workflow. Persistent CLI state is not included.
 
 ## Natural-language (NLP) mode
 

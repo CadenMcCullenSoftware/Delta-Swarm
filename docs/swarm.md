@@ -6,9 +6,9 @@ Detailed technical documentation for the multi-agent swarm system.
 
 Swarm is a local multi-agent orchestrator that runs workflow tasks across
 cooperating agents. Every state-changing action passes through an explicit
-pre-action approval gate, and all claims, sources, artifacts, and actions are
-recorded in a structured evidence record aligned with the agent-design schema
-from `/home/kaden/Desktop/Agent-Docs/design.md`.
+pre-action approval gate, and claims, sources, artifacts, and actions are
+recorded in a structured evidence record aligned with the included governance
+schemas.
 
 ## 2. Architecture
 
@@ -130,6 +130,12 @@ CLI entry point `swarm`:
 - `status --workflow <name>` — prints JSON summary including compliance and correctness per task/action
 - `nlp` — interactive natural-language mode (see Section 4)
 
+Each CLI invocation creates a new in-memory swarm. State-changing commands such
+as `add`, `run`, `approve`, `review-task`, `add-claim`, and `add-source` do not
+share state across invocations; `status` and `validate` therefore cannot read
+state created by an earlier command. Use the Python API in one process or the
+NLP REPL for a multi-step workflow. Durable CLI state is not implemented.
+
 ## 4. Natural-language (NLP) mode
 
 `swarm nlp` starts an interactive REPL accepting sentence-style commands:
@@ -220,7 +226,7 @@ For trusted local workflows (e.g., running your own build/test scripts), the cur
 
 ## 7. Automation gating (pre-action checklist)
 
-Consistent with `/home/kaden/Desktop/Agent-Docs/AGENTS.md` Section 2 and `Principle 2`:
+The following checks are recorded by the included gate and governance APIs:
 
 1. **User approval** — state-changing tasks require `requires_approval=True` and explicit `approve_action` before execution.
 2. **Scope confirmation** — the gate records `approved_scope` (the task name) and `target` (working directory).
@@ -233,19 +239,49 @@ A successful test or generated plan is **not** itself authorization; a separate 
 
 ### 8.1 Add and run a workflow (auto-approve)
 
-```bash
-swarm add --workflow release --task-id lint --name lint --command python -m py_compile src/swarm/cli.py
-swarm add --workflow release --task-id test --name test --command python -m pytest tests/ --depends-on lint
-swarm run --workflow release --auto-approve
+```python
+from swarm.swarm import Swarm
+from swarm.types import Task
+
+swarm = Swarm.default_swarm(name="release", auto_approve=True)
+swarm.add_task(Task(
+    task_id="lint",
+    name="lint",
+    command=["python", "-m", "py_compile", "src/swarm/cli.py"],
+))
+swarm.add_task(Task(
+    task_id="test",
+    name="test",
+    command=["python", "-m", "pytest", "tests/"],
+    depends_on=["lint"],
+))
+print(swarm.run())
 ```
+
+`auto_approve=True` is a commander opt-in for compliance only; it does not
+certify correctness.
 
 ### 8.2 Add and run with manual approval
 
-```bash
-swarm add --workflow release --task-id deploy --name deploy --command echo deploying --depends-on test --requires-approval
-swarm run --workflow release
-# deploy is BLOCKED; approve when ready:
-swarm approve --action-id action-deploy
+```python
+from swarm.swarm import Swarm
+from swarm.types import Task
+
+swarm = Swarm.default_swarm(name="release")
+pending_actions = []
+swarm.set_action_handler(
+    lambda action_id, task_name: pending_actions.append(action_id)
+)
+swarm.add_task(Task(
+    task_id="deploy",
+    name="deploy",
+    command=["python", "-c", "print('deploy')"],
+    requires_approval=True,
+))
+print(swarm.run())  # The task is blocked and its action id is recorded.
+
+# The human commander reviews and explicitly approves the pending action.
+swarm.approve_action(pending_actions[0])
 ```
 
 ### 8.3 NLP mode
