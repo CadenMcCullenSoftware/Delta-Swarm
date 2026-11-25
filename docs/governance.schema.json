@@ -3,7 +3,7 @@
   "$id": "https://example.invalid/swarm-governance.schema.json",
   "title": "Swarm Governance Architecture",
   "description": "Formal schema encoding the three governing principles: (1) Compliance vs. Correctness, (2) Evidence-Based Trust, (3) Hierarchical Authority (Commander-enforced correctness; AI is subordinate executor, never self-certifies).",
-  "version": "1.0.0",
+  "version": "1.0.1",
 
   "definitions": {
     "principle_id": {
